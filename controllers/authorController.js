@@ -92,3 +92,23 @@ exports.deleteAuthor = async (req, res) => {
     res.status(500).json({ message: 'Server error', error: err.message });
   }
 };
+// GET /authors/:id/books
+exports.getAuthorBooks = async (req, res) => {
+  try {
+    if (!mongoose.isValidObjectId(req.params.id)) {
+      return res.status(400).json({ message: `"${req.params.id}" is not a valid author id` });
+    }
+
+    const author = await Author.findById(req.params.id);
+    if (!author) {
+      return res.status(404).json({ message: `Author with id ${req.params.id} not found` });
+    }
+
+    // An author with no books should return an empty array, not a 404
+    const books = await Book.find({ author: author._id });
+    res.json(books);
+  } catch (err) {
+    res.status(500).json({ message: 'Server error', error: err.message });
+  }
+};
+
