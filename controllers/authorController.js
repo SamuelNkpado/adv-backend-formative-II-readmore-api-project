@@ -112,3 +112,43 @@ exports.getAuthorBooks = async (req, res) => {
   }
 };
 
+// GET /authors/:id/stats
+exports.getAuthorStats = async (req, res) => {
+  try {
+    if (!mongoose.isValidObjectId(req.params.id)) {
+      return res.status(400).json({ message: `"${req.params.id}" is not a valid author id` });
+    }
+
+    const author = await Author.findById(req.params.id);
+    if (!author) {
+      return res.status(404).json({ message: `Author with id ${req.params.id} not found` });
+    }
+
+    const books = await Book.find({ author: author._id });
+
+    // Requirement 6: an author with no books gets sensible empty values, not a crash
+    if (books.length === 0) {
+      return res.json({
+        author: author.name,
+        bookCount: 0,
+        averagePrice: null,
+        cheapestBook: null,
+        mostExpensiveBook: null,
+      });
+    }
+
+    const total = books.reduce((sum, book) => sum + book.price, 0);
+    const sorted = [...books].sort((a, b) => a.price - b.price);
+
+    res.json({
+      author: author.name,
+      bookCount: books.length,
+      averagePrice: Math.round((total / books.length) * 100) / 100,
+      cheapestBook: sorted[0].title,
+      mostExpensiveBook: sorted[sorted.length - 1].title,
+    });
+  } catch (err) {
+    res.status(500).json({ message: 'Server error', error: err.message });
+  }
+};
+
