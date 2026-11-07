@@ -14,7 +14,6 @@ const pickAllowedFields = (body) =>
 
 // Checks the business rules against a set of values.
 // Returns { status, message } for the first rule broken, or null if all pass.
-// excludeId lets an update skip its own book when checking for duplicate titles.
 const findRuleViolation = async ({ title, author, price, publishedYear, excludeId }) => {
   // Requirement 1: a book must reference an author that really exists (400)
   if (author !== undefined) {
@@ -80,10 +79,45 @@ exports.createBook = async (req, res) => {
   }
 };
 
-// GET /books
+// GET /books?genre=&minPrice=&maxPrice=&author=&search=&sort=&order=
 exports.getBooks = async (req, res) => {
   try {
-    const books = await Book.find().populate('author');
+    const { genre, minPrice, maxPrice, author, search, sort, order } = req.query;
+
+    // Build the filter only from parameters the client actually sent
+    const filter = {};
+
+    if (genre) {
+      filter.genre = genre;
+    }
+
+    if (author) {
+      if (!mongoose.isValidObjectId(author)) {
+        return res.status(400).json({ message: `"${author}" is not a valid author id` });
+      }
+      filter.author = author;
+    }
+
+    if (search) {
+      filter.title = { $regex: escapeRegex(search), $options: 'i' };
+    }
+
+    // Price bounds share one key, so merge them rather than overwrite
+    if (minPrice !== undefined || maxPrice !== undefined) {
+      filter.price = {};
+      if (minPrice !== undefined) filter.price.$gte = Number(minPrice);
+      if (maxPrice !== undefined) filter.price.$lte = Number(maxPrice);
+    }
+
+    // Only allow known sort fields, so a client can't sort on arbitrary paths
+    const SORTABLE = ['price', 'title', 'publishedYear'];
+    const sortField = SORTABLE.includes(sort) ? sort : 'title';
+    const sortDirection = order === 'desc' ? -1 : 1;
+
+    const books = await Book.find(filter)
+      .sort({ [sortField]: sortDirection })
+      .populate('author');
+
     res.json(books);
   } catch (err) {
     res.status(500).json({ message: 'Server error', error: err.message });
